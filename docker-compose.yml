@@ -1,0 +1,78 @@
+version: '3'
+
+services:
+  nginx:
+      image: nginx:stable-alpine
+      container_name: django_nginx
+      ports:
+        - "80:80"
+      volumes:
+        - ./nginx:/etc/nginx/conf.d
+        - ./logs:/home/mysite/logs
+        - ./mysite/media:/home/mysite/media
+        - ./mysite/static:/home/mysite/static
+      depends_on:
+        - mysite
+        - mysql
+      networks:
+        - django_nginx_network
+
+  mysql:
+      image: mariadb:10.5.8
+      container_name: django_mysql
+      command: mysqld --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      restart: unless-stopped
+      tty: true
+      ports:
+        - "3306:3306"
+      env_file:
+        - .django.env
+      volumes:
+        - ./mysql:/var/lib/mysql
+        - ./sql:/docker-entrypoint-initdb.d
+      networks:
+        - django_mysql_network
+
+  phpmyadmin:
+    container_name: django_php_admin
+    depends_on:
+      - mysql
+    # image: phpmyadmin/phpmyadmin
+    image: arm64v8/phpmyadmin
+    restart: always
+    ports:
+      - '8002:80'
+    env_file:
+      - .django.env
+    networks:
+      - django_mysql_network
+  
+  mysite:
+ 
+    # Build context
+    build: ./mysite
+    container_name: django_gunicorn
+    restart: unless-stopped
+    volumes:
+      - ./mysite:/home/mysite
+    ports:
+      - "8000:8000"
+    env_file:
+      - .django.env
+    depends_on:
+      - mysql
+    # expose:
+    #   - 8000
+    # Build commands
+    # command:
+    #   "gunicorn --workers=2 --bind=0.0.0.0:8000 mysite.wsgi:application"
+    
+    networks:
+      - django_nginx_network
+      - django_mysql_network
+
+networks:
+    django_nginx_network:
+        driver: bridge
+    django_mysql_network:
+        driver: bridge
